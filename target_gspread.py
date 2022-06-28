@@ -162,7 +162,7 @@ def main():
 def get_config(args):
     try:
         content = Path(args.config).read_text()
-        config: TargetGSpreadConfig = json.load(content)
+        config: TargetGSpreadConfig = json.loads(content)
     except FileNotFoundError:
         raise FileNotFoundError(f"Configuration file not found: '{args.config}'") from None
     except json.JSONDecodeError:
