@@ -1,21 +1,18 @@
 import json
-import types
-from typing import Any, Iterable, Protocol, TypedDict
-import typing
-import gspread
-from pathlib import Path
-
-from argparse import ArgumentParser
-
-import jsonschema
-
-from io import TextIOWrapper
-import sys
-
 import logging
+import sys
+import types
+import typing
+from argparse import ArgumentParser
+from io import TextIOWrapper
+from pathlib import Path
+from typing import Any, Iterable, Protocol, TypedDict
+
+import gspread
+import jsonschema
 import singer
 
-logging.getLogger('gspread').setLevel(logging.WARNING)
+logging.getLogger("gspread").setLevel(logging.WARNING)
 logger = singer.get_logger()
 
 SECRETS = Path(".secrets")
@@ -23,11 +20,14 @@ CREDENTIALS = SECRETS / "service_account.json"
 
 WORKSHEET_DEFAULT_ROWS, WORKSHEET_DEFAULT_COLS = 100, 20
 
+
 class TargetGspreadException(Exception):
     ...
 
+
 class MessageNotRecognized(TargetGspreadException):
     ...
+
 
 class SchemaNotFound(TargetGspreadException):
     ...
@@ -45,7 +45,7 @@ class SingerData(Protocol):
 
 def parser():
     arg_parser = ArgumentParser()
-    arg_parser.add_argument('-c', '--config', help='Config file', required=True)
+    arg_parser.add_argument("-c", "--config", help="Config file", required=True)
 
     return arg_parser
 
@@ -59,7 +59,7 @@ def read_stdin() -> Iterable[str]:
 def output_state(state: dict | None):
     if state is None:
         return
-    
+
     raw = json.dumps(state)
     logger.debug(f"Outputting State: {raw}")
     sys.stdout.write(raw + "\n")
@@ -76,9 +76,9 @@ def flatten_record(record: typing.MutableMapping) -> dict:
 
                 case _:
                     yield key, value
-    
+
     return dict(items())
-            
+
 
 def process_message(msg: str, data: SingerData) -> dict[str, dict] | None:
     match msg:
@@ -87,28 +87,32 @@ def process_message(msg: str, data: SingerData) -> dict[str, dict] | None:
             data.key_properties[msg.stream] = msg.key_properties
 
             return None
-        
+
         case singer.StateMessage:
             logger.debug(f"State set to: {msg.value}")
             state: dict = msg.value
 
             return {"state": state}
-            
+
         case singer.RecordMessage:
             if msg.stream not in data.schemas:
-                raise SchemaNotFound(f"Record for stream {msg.stream} was found before the cooresponding schema was recorded")
-            
+                raise SchemaNotFound(
+                    f"Record for stream {msg.stream} was found before the cooresponding schema was recorded"
+                )
+
             jsonschema.validate(schema := data.schemas[msg.stream])
             flattened_record = flatten_record(msg.record)
 
             return {"record": flattened_record}
-        
+
         case _:
             raise MessageNotRecognized(f"Message {msg} not recognized")
 
 
 def process_stream(sh: gspread.Spreadsheet, stream: Iterable[str]):
-    singer_data: SingerData = types.SimpleNamespace(schemas={}, state={}, key_properties={})
+    singer_data: SingerData = types.SimpleNamespace(
+        schemas={}, state={}, key_properties={}
+    )
 
     state = None
     for raw_msg in stream:
@@ -121,19 +125,17 @@ def process_stream(sh: gspread.Spreadsheet, stream: Iterable[str]):
         match process_message(msg, singer_data):
             case {"state": state}:
                 ...
-            
+
             case {"record": record}:
                 worksheet = get_or_create_sheet(sh, msg.stream, record)
 
                 list_of_rows = [list(row) for row in zip(*record.values())]
-                
+
                 # make sure we prepend the header with the column names
                 if not worksheet.row_values(1):
                     list_of_rows.prepend(list(record.keys()))
 
-                worksheet.append_rows(
-                    list_of_rows, value_input_option="RAW"
-                )
+                worksheet.append_rows(list_of_rows, value_input_option="RAW")
 
     output_state(state)
 
@@ -144,7 +146,9 @@ def get_or_create_sheet(spreadsheet: gspread.Spreadsheet, name: str, record: dic
 
     except gspread.WorksheetNotFound:
         logger.info(f"Creating new worksheet: {name}")
-        return spreadsheet.add_worksheet(title=name, rows=WORKSHEET_DEFAULT_ROWS, cols=WORKSHEET_DEFAULT_COLS)
+        return spreadsheet.add_worksheet(
+            title=name, rows=WORKSHEET_DEFAULT_ROWS, cols=WORKSHEET_DEFAULT_COLS
+        )
 
 
 def main():
@@ -164,9 +168,13 @@ def get_config(args):
         content = Path(args.config).read_text()
         config: TargetGSpreadConfig = json.loads(content)
     except FileNotFoundError:
-        raise FileNotFoundError(f"Configuration file not found: '{args.config}'") from None
+        raise FileNotFoundError(
+            f"Configuration file not found: '{args.config}'"
+        ) from None
     except json.JSONDecodeError:
-        raise json.JSONDecodeError(f"Configuration file at '{args.config}' is improper json") from None
+        raise json.JSONDecodeError(
+            f"Configuration file at '{args.config}' is improper json"
+        ) from None
     return config
 
 
