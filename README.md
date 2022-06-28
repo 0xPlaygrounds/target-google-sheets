@@ -1,4 +1,4 @@
-# target-gspread
+# target-google-sheets
 
 ## Quick Start
 1. Follow the guides from the [Google Sheet API Docs](https://developers.google.com/sheets/api/quickstart/python) to create a new service account
