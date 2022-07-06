@@ -15,9 +15,10 @@ import singer
 
 logging.getLogger("gspread").setLevel(logging.WARNING)
 
-SECRETS = Path(".secrets")
-CREDENTIALS = SECRETS / "service_account.json"
+# Default path for `.secrets` credentials
+DEFAULT_CREDENTIALS_PATH = ".secrets/credentials.json"
 
+# Default size for worksheet creation
 WORKSHEET_DEFAULT_ROWS, WORKSHEET_DEFAULT_COLS = 100, 20
 
 # Sink Settings (in rows)
@@ -267,20 +268,21 @@ def main():
     config = get_config(args)
     message_stream = read_stdin()
 
-    spreadsheet = get_spreadsheet(config["spreadsheet_url"])
+    credentials = config.get("credentials_path", DEFAULT_CREDENTIALS_PATH)
+    spreadsheet = get_spreadsheet(config["spreadsheet_url"], Path(credentials))
 
     process_stream(spreadsheet, message_stream)
     singer.log_info("Target has consumed all streams to completion")
 
 
-def get_spreadsheet(url: str) -> gspread.Spreadsheet:
+def get_spreadsheet(url: str, crendentials: Path) -> gspread.Spreadsheet:
     """Gets spreadsheet by url
 
     raises SpreadsheetNotFound
     """
 
     try:
-        gc: gspread.Client = gspread.service_account(CREDENTIALS)
+        gc: gspread.Client = gspread.service_account(crendentials)
         sh: gspread.Spreadsheet = gc.open_by_url(url)
     except gspread.SpreadsheetNotFound:
         raise gspread.SpreadsheetNotFound(
