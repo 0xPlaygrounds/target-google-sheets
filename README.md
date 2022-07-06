@@ -1,5 +1,7 @@
 # target-google-sheets
 
+> A [Singer](https://github.com/singer-io) target for Google Sheets using the [gspread](https://github.com/burnash/gspread) library
+
 ## Install
 
 We recommend installing all singer taps and targets into their own environments as per the [Singer FAQ](https://github.com/singer-io/getting-started/blob/master/docs/FAQ.md#how-do-i-prevent-dependency-conflicts-between-my-tap-and-target).
