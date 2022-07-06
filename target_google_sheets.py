@@ -7,15 +7,13 @@ from argparse import ArgumentParser
 from collections import defaultdict
 from io import TextIOWrapper
 from pathlib import Path
-from typing import Any, Iterable, Protocol, TypedDict
-from unittest.mock import DEFAULT
+from typing import Iterable, Protocol, TypedDict
 
 import gspread
 import jsonschema
 import singer
 
 logging.getLogger("gspread").setLevel(logging.WARNING)
-logger = singer.get_logger()
 
 SECRETS = Path(".secrets")
 CREDENTIALS = SECRETS / "service_account.json"
@@ -29,32 +27,53 @@ MAX_SINK_LIMIT = 250
 
 
 class TargetException(Exception):
-    ...
+    """Base for all TargetGoogleSheets exceptions"""
 
 
 class MessageNotRecognized(TargetException):
-    ...
+    """Raised when encountering an unknown Singer message type"""
 
 
 class SchemaNotFound(TargetException):
-    ...
+    """Raised when RECORD message are received before a SCHEMA messages"""
 
 
 class OverflowedSink(TargetException):
-    ...
+    """Exception which occurs when Sink reaches MAX_SINK_LIMIT number of rows"""
 
 
 class TargetGoogleSheetConfig(TypedDict):
+    """Simple type definition for the target config"""
+
     spreadsheet_url: str
 
 
 class SingerData(Protocol):
+    """Simplified representation of singer data"""
+
     schemas: dict
     key_properties: dict
     state: dict
 
 
 class GoogleSheetsSink:
+    """A RECORD row sink to hold batches of rows before sending to google sheets
+
+    This class defines a sink object which will batch rows up before sending a single
+      Gspread API request. This allows us to make significantly less requests
+      making the singer target more efficient, and less taxing on API limits.
+
+    If a request fails, the sink increases it's size by a set increment, if requests
+      continue to fail, the max sink limit will be reached causing an overflow exception.
+
+    Each stream will have it's own "sink" so this class acts as a collection of sinks.
+
+    Constants:
+      - DEFAULT_SINK_SIZE: Default size of sink
+      - SINK_LIMIT_INCREMENT: How much the sink should grow
+      - MAX_SINK_LIMIT: Max size of sink before overflowing
+    """
+
     sinks: defaultdict[str, list[list]]
     limit: defaultdict[str, int]
     worksheets: dict[str, gspread.Spreadsheet]
@@ -66,12 +85,20 @@ class GoogleSheetsSink:
         self.worksheets = {}
 
     def get_or_create_sheet(self, name: str, record: dict):
+        """Retrieves a sheet from the gspread API
+
+        If a sheet name is not found, then the method will produce a new sheet.
+        It will also prefil the first row with column information curated from a
+          singer record/row.
+        """
+
         name = name.replace(":", "_")
+
         try:
             return self.spreadsheet.worksheet(name)
 
         except gspread.WorksheetNotFound:
-            logger.info(f"Creating new worksheet: {name}")
+            singer.log_info(f"Creating new worksheet: {name}")
             sh = self.spreadsheet.add_worksheet(
                 title=name, rows=WORKSHEET_DEFAULT_ROWS, cols=WORKSHEET_DEFAULT_COLS
             )
@@ -79,6 +106,10 @@ class GoogleSheetsSink:
             return sh
 
     def add(self, stream: str, record: dict):
+        """Add a record to the sink for a specific singer stream
+
+        Checks if the stream's sink is overflowed and drains it if so.
+        """
         self.sinks[stream].append(list(record.keys()))
 
         if stream not in self.worksheets:
@@ -87,6 +118,8 @@ class GoogleSheetsSink:
         self.check(stream)
 
     def check(self, stream):
+        """Drains sink after checking for overflow"""
+
         if len(self.sinks[stream]) > self.limit[stream]:
             self.drain(stream)
 
@@ -96,7 +129,7 @@ class GoogleSheetsSink:
         try:
             sheet = self.worksheets[stream]
             sheet.append_rows(sink, value_input_option="RAW")
-            logger.info(f"Sink limit hit, draining {len(sink)} rows")
+            singer.log_info(f"Sink limit hit, draining {len(sink)} rows")
             self.sinks[stream] = []
 
         except gspread.exceptions.APIError as err:
@@ -104,21 +137,24 @@ class GoogleSheetsSink:
                 raise err
 
             if self.limit[stream] > MAX_SINK_LIMIT:
-                raise OverflowedSink(
-                    f"Max sink size of {self.limit[stream]} reached."
-                )
+                raise OverflowedSink(f"Max sink size of {self.limit[stream]} reached.")
 
-            logger.warning(
+            singer.log_warning(
                 f"Google Sheets API Quote reached. Increasing size of sink {stream} temporarily.."
             )
             self.limit[stream] += SINK_LIMIT_INCREMENT
-    
+
     def drain_all(self):
+        """Drains all sinks (that have rows)
+
+        Generally used after winding down the target.
+        """
+
         for stream, sink in self.sinks.items():
             if sink:
                 self.drain(stream)
-        
-        logger.info("All sinks drained!")
+
+        singer.log_info("All sinks drained!")
 
 
 def parser():
@@ -135,16 +171,20 @@ def read_stdin() -> Iterable[str]:
 
 
 def output_state(state: dict | None):
+    """Write JSON to stdout directly to produce state"""
+
     if state is None:
         return
 
     raw = json.dumps(state)
-    logger.debug(f"Outputting State: {raw}")
+    singer.log_debug(f"Outputting State: {raw}")
     sys.stdout.write(raw + "\n")
     sys.stdout.flush()
 
 
 def flatten_record(record: typing.MutableMapping) -> dict:
+    """Recursively flatten records to fit inside a tabular Google Sheet"""
+
     def items():
         for key, value in record.items():
             match value:
@@ -159,6 +199,8 @@ def flatten_record(record: typing.MutableMapping) -> dict:
 
 
 def process_message(msg: singer.Message, data: SingerData) -> dict[str, dict] | None:
+    """Main match statement to parse and understand the Singer messages"""
+
     match msg:
         case singer.SchemaMessage():
             data.schemas[msg.stream] = msg.schema
@@ -167,7 +209,7 @@ def process_message(msg: singer.Message, data: SingerData) -> dict[str, dict] | 
             return None
 
         case singer.StateMessage():
-            logger.debug(f"State set to: {msg.value}")
+            singer.log_debug(f"State set to: {msg.value}")
             state: dict = msg.value
 
             return {"state": state}
@@ -190,6 +232,11 @@ def process_message(msg: singer.Message, data: SingerData) -> dict[str, dict] | 
 
 
 def process_stream(sh: gspread.Spreadsheet, message_stream: Iterable[str]):
+    """Iteratively processes the messages from the message_stream
+
+    After exhausting stream, drain all
+    """
+
     singer_data: SingerData = types.SimpleNamespace(
         schemas={}, state={}, key_properties={}
     )
@@ -201,7 +248,7 @@ def process_stream(sh: gspread.Spreadsheet, message_stream: Iterable[str]):
         try:
             msg = singer.parse_message(raw_msg)
         except json.decoder.JSONDecodeError:
-            logger.error("Parsing failed for message:\n {raw}")
+            singer.log_error("Parsing failed for message:\n {raw}")
             raise
 
         match process_message(msg, singer_data):
@@ -223,10 +270,15 @@ def main():
     spreadsheet = get_spreadsheet(config["spreadsheet_url"])
 
     process_stream(spreadsheet, message_stream)
-    logger.info("Target has consumed all streams to completion")
+    singer.log_info("Target has consumed all streams to completion")
 
 
-def get_spreadsheet(url: str) -> gspread.SpreadsheetNotFound:
+def get_spreadsheet(url: str) -> gspread.Spreadsheet:
+    """Gets spreadsheet by url
+
+    raises SpreadsheetNotFound
+    """
+
     try:
         gc: gspread.Client = gspread.service_account(CREDENTIALS)
         sh: gspread.Spreadsheet = gc.open_by_url(url)
@@ -238,6 +290,7 @@ def get_spreadsheet(url: str) -> gspread.SpreadsheetNotFound:
 
 
 def get_config(args):
+    """Gets config from args"""
     try:
         content = Path(args.config).read_text()
         config: TargetGoogleSheetConfig = json.loads(content)

@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "target-google-sheets"
 version = "0.1.0"
-description = ""
-authors = ["Your Name <you@example.com>"]
+description = "A singer target for google sheets using gspread"
+authors = ["0xMochan <mochanbot@gmail.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -21,6 +21,9 @@ target-google-sheets = "target_google_sheets:main"
 
 [tool.poe.tasks]
 format = { shell = "isort .; black ."}
+
+[tool.isort]
+profile = "black"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
