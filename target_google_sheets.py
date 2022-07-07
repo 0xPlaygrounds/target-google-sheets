@@ -111,7 +111,7 @@ class GoogleSheetsSink:
 
         Checks if the stream's sink is overflowed and drains it if so.
         """
-        self.sinks[stream].append(list(record.keys()))
+        self.sinks[stream].append(list(record.values()))
 
         if stream not in self.worksheets:
             self.worksheets[stream] = self.get_or_create_sheet(stream, record)
