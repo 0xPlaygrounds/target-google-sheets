@@ -1,4 +1,5 @@
-from typing import TypedDict, Protocol
+from typing import Protocol, TypedDict
+
 
 class TargetGoogleSheetConfig(TypedDict):
     """Simple type definition for the target config"""

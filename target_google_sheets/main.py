@@ -13,12 +13,8 @@ import gspread
 import jsonschema
 import singer
 
-from .exceptions import (
-    MessageNotRecognized,
-    OverflowedSink,
-    SchemaNotFound,
-)
-from .models import TargetGoogleSheetConfig, SingerData
+from .exceptions import MessageNotRecognized, OverflowedSink, SchemaNotFound
+from .models import SingerData, TargetGoogleSheetConfig
 from .utils import DEFAULT_CREDENTIALS_PATH, get_credentials
 
 logging.getLogger("gspread").setLevel(logging.WARNING)
@@ -30,6 +26,7 @@ WORKSHEET_DEFAULT_ROWS, WORKSHEET_DEFAULT_COLS = 100, 20
 DEFAULT_SINK_SIZE = 50
 SINK_LIMIT_INCREMENT = 20
 MAX_SINK_LIMIT = 250
+
 
 class GoogleSheetsSink:
     """A RECORD row sink to hold batches of rows before sending to google sheets
