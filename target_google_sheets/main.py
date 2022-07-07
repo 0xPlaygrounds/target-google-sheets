@@ -14,7 +14,7 @@ import jsonschema
 import singer
 
 from .exceptions import MessageNotRecognized, OverflowedSink, SchemaNotFound
-from .models import SingerData, TargetGoogleSheetConfig, SinkConfig
+from .models import SingerData, SinkConfig, TargetGoogleSheetConfig
 from .utils import DEFAULT_CREDENTIALS_PATH, get_credentials
 
 logging.getLogger("gspread").setLevel(logging.WARNING)
@@ -280,16 +280,22 @@ def get_config(args):
         raise json.JSONDecodeError(
             f"Configuration file at '{args.config}' is improper json"
         ) from None
-    
+
     # TODO: Use Pydantic (defaults)
     if "sink" not in config:
-        config["sink"] = SinkConfig(default_sink_size=DEFAULT_SINK_SIZE, sink_limit_increment=SINK_LIMIT_INCREMENT, max_sink_limit=MAX_SINK_LIMIT)
+        config["sink"] = SinkConfig(
+            default_sink_size=DEFAULT_SINK_SIZE,
+            sink_limit_increment=SINK_LIMIT_INCREMENT,
+            max_sink_limit=MAX_SINK_LIMIT,
+        )
     else:
         sink = config["sink"]
         sink["default_sink_size"] = sink.get("default_sink_size", DEFAULT_SINK_SIZE)
-        sink["sink_limit_increment"] = sink.get("sink_limit_increment", SINK_LIMIT_INCREMENT)
+        sink["sink_limit_increment"] = sink.get(
+            "sink_limit_increment", SINK_LIMIT_INCREMENT
+        )
         sink["max_sink_limit"] = sink.get("max_sink_limit", MAX_SINK_LIMIT)
-    
+
     return config
 
 

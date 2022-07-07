@@ -1,5 +1,5 @@
-from pathlib import Path
 import logging
+from pathlib import Path
 
 #: Default credentials path (both `~` and `pwd`)
 DEFAULT_CREDENTIALS_PATH = Path(".secrets/google_sheets.json")
