@@ -14,7 +14,7 @@ import jsonschema
 import singer
 
 from .exceptions import MessageNotRecognized, OverflowedSink, SchemaNotFound
-from .models import SingerData, TargetGoogleSheetConfig
+from .models import SingerData, TargetGoogleSheetConfig, SinkConfig
 from .utils import DEFAULT_CREDENTIALS_PATH, get_credentials
 
 logging.getLogger("gspread").setLevel(logging.WARNING)
@@ -23,9 +23,9 @@ logging.getLogger("gspread").setLevel(logging.WARNING)
 WORKSHEET_DEFAULT_ROWS, WORKSHEET_DEFAULT_COLS = 100, 20
 
 #: Sink Settings (in rows)
-DEFAULT_SINK_SIZE = 50
-SINK_LIMIT_INCREMENT = 20
-MAX_SINK_LIMIT = 250
+DEFAULT_SINK_SIZE = 250
+SINK_LIMIT_INCREMENT = 250
+MAX_SINK_LIMIT = 2000
 
 
 class GoogleSheetsSink:
@@ -50,9 +50,10 @@ class GoogleSheetsSink:
     limit: defaultdict[str, int]
     worksheets: dict[str, gspread.Spreadsheet]
 
-    def __init__(self, spreadsheet: gspread.Spreadsheet):
+    def __init__(self, sink_config: SinkConfig, spreadsheet: gspread.Spreadsheet):
+        self.config = sink_config
         self.sinks = defaultdict(list)
-        self.limit = defaultdict(lambda: DEFAULT_SINK_SIZE)
+        self.limit = defaultdict(lambda: sink_config["default_sink_size"])
         self.spreadsheet = spreadsheet
         self.worksheets = {}
 
@@ -108,13 +109,13 @@ class GoogleSheetsSink:
             if not err.response.status_code == 429:
                 raise err
 
-            if self.limit[stream] > MAX_SINK_LIMIT:
+            if self.limit[stream] > self.config["max_sink_limit"]:
                 raise OverflowedSink(f"Max sink size of {self.limit[stream]} reached.")
 
             singer.log_warning(
                 f"Google Sheets API Quote reached. Increasing size of sink {stream} temporarily.."
             )
-            self.limit[stream] += SINK_LIMIT_INCREMENT
+            self.limit[stream] += self.config["sink_limit_increment"]
 
     def drain_all(self):
         """Drains all sinks (that have rows)
@@ -249,7 +250,7 @@ def main():
 def get_spreadsheet(url: str, crendentials: Path) -> gspread.Spreadsheet:
     """Gets spreadsheet by url
 
-    raises SpreadsheetNotFound
+    raises: SpreadsheetNotFound
     """
 
     try:
@@ -264,7 +265,8 @@ def get_spreadsheet(url: str, crendentials: Path) -> gspread.Spreadsheet:
 
 
 def get_config(args):
-    """Gets config from args"""
+    """Gets config from args. Also sets default values"""
+
     try:
         content = Path(args.config).read_text()
         config: TargetGoogleSheetConfig = json.loads(content)
@@ -278,7 +280,16 @@ def get_config(args):
         raise json.JSONDecodeError(
             f"Configuration file at '{args.config}' is improper json"
         ) from None
-
+    
+    # TODO: Use Pydantic (defaults)
+    if "sink" not in config:
+        config["sink"] = SinkConfig(default_sink_size=DEFAULT_SINK_SIZE, sink_limit_increment=SINK_LIMIT_INCREMENT, max_sink_limit=MAX_SINK_LIMIT)
+    else:
+        sink = config["sink"]
+        sink["default_sink_size"] = sink.get("default_sink_size", DEFAULT_SINK_SIZE)
+        sink["sink_limit_increment"] = sink.get("sink_limit_increment", SINK_LIMIT_INCREMENT)
+        sink["max_sink_limit"] = sink.get("max_sink_limit", MAX_SINK_LIMIT)
+    
     return config
 
 

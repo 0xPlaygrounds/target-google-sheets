@@ -1,4 +1,9 @@
 {
     "spreadsheet_url": "https://docs.google.com/spreadsheets/d/abcdefghijklmnopqrstuvwxyz0987654321abcdefgh/",
-    "credentials_path": ".secrets/credentials.json"
+    "credentials_path": ".secrets/google_sheets.json",
+    "sink": {
+        "default_sink_size": 250,
+        "sink_limit_increment": 250,
+        "max_sink_limit": 200
+    }
 }

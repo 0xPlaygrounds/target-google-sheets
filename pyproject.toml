@@ -9,6 +9,7 @@ python = "^3.10"
 gspread = "^5.4.0"
 singer-python = "^5.12.2"
 jsonschema = "2.6.0"
+typing-extensions = "^4.3.0"
 
 [tool.poetry.dev-dependencies]
 poethepoet = "^0.13.1"
