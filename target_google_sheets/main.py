@@ -7,55 +7,29 @@ from argparse import ArgumentParser
 from collections import defaultdict
 from io import TextIOWrapper
 from pathlib import Path
-from typing import Iterable, Protocol, TypedDict
+from typing import Iterable
 
 import gspread
 import jsonschema
 import singer
 
+from .exceptions import (
+    MessageNotRecognized,
+    OverflowedSink,
+    SchemaNotFound,
+)
+from .models import TargetGoogleSheetConfig, SingerData
+from .utils import DEFAULT_CREDENTIALS_PATH, get_credentials
+
 logging.getLogger("gspread").setLevel(logging.WARNING)
 
-# Default path for `.secrets` credentials
-DEFAULT_CREDENTIALS_PATH = ".secrets/credentials.json"
-
-# Default size for worksheet creation
+#: Default size for worksheet creation
 WORKSHEET_DEFAULT_ROWS, WORKSHEET_DEFAULT_COLS = 100, 20
 
-# Sink Settings (in rows)
+#: Sink Settings (in rows)
 DEFAULT_SINK_SIZE = 50
 SINK_LIMIT_INCREMENT = 20
 MAX_SINK_LIMIT = 250
-
-
-class TargetException(Exception):
-    """Base for all TargetGoogleSheets exceptions"""
-
-
-class MessageNotRecognized(TargetException):
-    """Raised when encountering an unknown Singer message type"""
-
-
-class SchemaNotFound(TargetException):
-    """Raised when RECORD message are received before a SCHEMA messages"""
-
-
-class OverflowedSink(TargetException):
-    """Exception which occurs when Sink reaches MAX_SINK_LIMIT number of rows"""
-
-
-class TargetGoogleSheetConfig(TypedDict):
-    """Simple type definition for the target config"""
-
-    spreadsheet_url: str
-
-
-class SingerData(Protocol):
-    """Simplified representation of singer data"""
-
-    schemas: dict
-    key_properties: dict
-    state: dict
-
 
 class GoogleSheetsSink:
     """A RECORD row sink to hold batches of rows before sending to google sheets
@@ -268,8 +242,8 @@ def main():
     config = get_config(args)
     message_stream = read_stdin()
 
-    credentials = config.get("credentials_path", DEFAULT_CREDENTIALS_PATH)
-    spreadsheet = get_spreadsheet(config["spreadsheet_url"], Path(credentials))
+    credential_path = config.get("credentials_path", DEFAULT_CREDENTIALS_PATH)
+    spreadsheet = get_spreadsheet(config["spreadsheet_url"], Path(credential_path))
 
     process_stream(spreadsheet, message_stream)
     singer.log_info("Target has consumed all streams to completion")
@@ -282,13 +256,14 @@ def get_spreadsheet(url: str, crendentials: Path) -> gspread.Spreadsheet:
     """
 
     try:
-        gc: gspread.Client = gspread.service_account(crendentials)
-        sh: gspread.Spreadsheet = gc.open_by_url(url)
+        credentials = get_credentials(crendentials)  # can raise error
+        gc = gspread.service_account(credentials)
+        return gc.open_by_url(url)
+
     except gspread.SpreadsheetNotFound:
         raise gspread.SpreadsheetNotFound(
             f"Spreadsheet not found, url: {url}"
         ) from None
-    return sh
 
 
 def get_config(args):
@@ -296,14 +271,17 @@ def get_config(args):
     try:
         content = Path(args.config).read_text()
         config: TargetGoogleSheetConfig = json.loads(content)
+
     except FileNotFoundError:
         raise FileNotFoundError(
             f"Configuration file not found: '{args.config}'"
         ) from None
+
     except json.JSONDecodeError:
         raise json.JSONDecodeError(
             f"Configuration file at '{args.config}' is improper json"
         ) from None
+
     return config
 
 

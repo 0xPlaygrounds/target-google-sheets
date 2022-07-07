@@ -14,8 +14,7 @@ pip install https://github.com/0xPlaygrounds/target-google-sheets
 1. Follow the guides from the [Google Sheet API Docs](https://developers.google.com/sheets/api/quickstart/python) to create a new service account
    1. You should follow this [wizard](https://console.developers.google.com/start/api?id=sheets.googleapis.com) ideally.
 2. Enable the [Google Drive API](https://console.developers.google.com/apis/api/drive.googleapis.com/overview?) (This link should automatically take you to your project).
-3. Create a new credentials key for your **service account**, download it to the `.secrets`, and rename it to `credentials.json`. Alternatively, you can place it whereever you want and define the path to it via the config.
-> TODO: Add ability to parse from environment variables
+3. Create a new credentials key for your **service account**, download it to the `.secrets`, and rename it to `google_sheets.json`. Alternatively, you can place it whereever you want and define the path to it via the config. The target will also check `~/<credentials_path>` if you want a global space.
 
 ## Invocation
 
