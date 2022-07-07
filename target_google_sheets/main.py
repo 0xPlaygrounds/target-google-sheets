@@ -72,11 +72,11 @@ class GoogleSheetsSink:
 
         except gspread.WorksheetNotFound:
             singer.log_info(f"Creating new worksheet: {name}")
-            sh = self.spreadsheet.add_worksheet(
+            spreadsheet = self.spreadsheet.add_worksheet(
                 title=name, rows=WORKSHEET_DEFAULT_ROWS, cols=WORKSHEET_DEFAULT_COLS
             )
-            sh.append_row(list(record.keys()), value_input_option="RAW")
-            return sh
+            spreadsheet.append_row(list(record.keys()), value_input_option="RAW")
+            return spreadsheet
 
     def add(self, stream: str, record: dict):
         """Add a record to the sink for a specific singer stream
@@ -204,7 +204,7 @@ def process_message(msg: singer.Message, data: SingerData) -> dict[str, dict] | 
             )
 
 
-def process_stream(sh: gspread.Spreadsheet, message_stream: Iterable[str]):
+def process_stream(config: TargetGoogleSheetConfig, spreadsheet: gspread.Spreadsheet, message_stream: Iterable[str]):
     """Iteratively processes the messages from the message_stream
 
     After exhausting stream, drain all
@@ -214,7 +214,7 @@ def process_stream(sh: gspread.Spreadsheet, message_stream: Iterable[str]):
         schemas={}, state={}, key_properties={}
     )
 
-    sink = GoogleSheetsSink(sh)
+    sink = GoogleSheetsSink(config, spreadsheet)
 
     state = None
     for raw_msg in message_stream:
@@ -243,7 +243,7 @@ def main():
     credential_path = config.get("credentials_path", DEFAULT_CREDENTIALS_PATH)
     spreadsheet = get_spreadsheet(config["spreadsheet_url"], Path(credential_path))
 
-    process_stream(spreadsheet, message_stream)
+    process_stream(config, spreadsheet, message_stream)
     singer.log_info("Target has consumed all streams to completion")
 
 
