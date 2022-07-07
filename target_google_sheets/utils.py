@@ -10,7 +10,7 @@ def get_credentials(credentials_path) -> Path:
     if credentials_path.exists():
         return credentials_path
 
-    if (credentials_path := Path.home / credentials_path).exists():
+    if (credentials_path := Path.home() / credentials_path).exists():
         return credentials_path
 
     raise FileNotFoundError(
