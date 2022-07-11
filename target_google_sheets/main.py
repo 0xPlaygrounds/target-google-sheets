@@ -214,7 +214,7 @@ def process_stream(config: TargetGoogleSheetConfig, spreadsheet: gspread.Spreads
         schemas={}, state={}, key_properties={}
     )
 
-    sink = GoogleSheetsSink(config, spreadsheet)
+    sink = GoogleSheetsSink(config["sink"], spreadsheet)
 
     state = None
     for raw_msg in message_stream:
